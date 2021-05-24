@@ -154,6 +154,15 @@ class GyemsRMD(CANDevice):
         return accel_limit
     
     def get_accel_limit(self):
+        """
+            Send the command to the motor to get current acceleration limit.
+            
+            Returns
+            -------
+            accel_limit : float
+                Unit: `1 rad / s**2`.
+                `0` means unlimited acceleration.
+        """
         _accel_limit = self.__get_accel_limit()
         accel_limit = math.radians(_accel_limit)
         return accel_limit
@@ -178,6 +187,17 @@ class GyemsRMD(CANDevice):
         self.check()
 
     def set_accel_limit(self, accel_limit):
+        """
+            Send the command to the motor to set new acceleration limit.
+            
+            NOTE: writes the data to `RAM`, resets after reboot.
+            
+            Parameters
+            ----------
+            accel_limit : float
+                Unit: `1 rad / s**2`.
+                Set `0` to get unlimited acceleration.
+        """
         _accel_limit = math.degrees(accel_limit)
         self.__set_accel_limit(_accel_limit)
 
@@ -207,6 +227,20 @@ class GyemsRMD(CANDevice):
         return pos, pos_orig, offset
 
     def get_encoder_offset(self):
+        """
+            Send the command to the motor to get encoder state and offset
+            in radians.
+            
+            Returns
+            -------
+            pos : float
+                Current position of the motor, which is an original position
+                minus encoder offset.
+            pos_orig : float
+                Encoder original position.
+            offset : float
+                Encoder offset.
+        """
         _pos, _pos_orig, _offset = self.__get_encoder_offset()
         pos = self.encoder_scale * _pos
         pos_orig = self.encoder_scale * _pos_orig
@@ -240,6 +274,20 @@ class GyemsRMD(CANDevice):
         self.check()
 
     def set_encoder_offset(self, offset=None):
+        """
+            Send the command to the motor to set new encoder offset
+            in radians.
+
+            NOTE: Multiple writes to `ROM` will affect the chip life!
+            Do not recommended to use frequently!
+            
+            Parameters
+            ----------
+            offset : float, optional
+                Encoder offset to be written. Range from 0 to 2*pi.
+                If `None` current encoder position would be written
+                as the encoder offset.
+        """
         if offset is not None:
             _offset = (1 / self.encoder_scale) * offset
         else:
@@ -266,6 +314,16 @@ class GyemsRMD(CANDevice):
         return mt_angle
 
     def get_multi_turns_angle(self):
+        """
+            Send the command to the motor to get multi-turns angle.
+            
+            Returns
+            -------
+            mt_angle : float
+                Unit: `1 rad`.
+                Positive value indicates clockwise angle, negative value
+                indicates counter-clockwise angle.
+        """
         _mt_angle = self.__get_multi_turns_angle()
         mt_angle = math.radians(self.angle_get * _mt_angle)
         return mt_angle
@@ -290,6 +348,15 @@ class GyemsRMD(CANDevice):
         return sc_angle
 
     def get_single_circle_angle(self):
+        """
+            Send the command to the motor to get single-circle angle.
+            
+            Returns
+            -------
+            sc_angle : float
+                Unit: `1 rad`.
+                Range from 0 to 2*pi. Increased by clockwise rotation.
+        """
         _sc_angle = self.__get_single_circle_angle()
         sc_angle = math.radians(self.angle_get * _sc_angle)
         return sc_angle
@@ -320,6 +387,20 @@ class GyemsRMD(CANDevice):
         return temperature, voltage, error_state
 
     def get_error_state(self):
+        """
+            Send the command to the motor to get motor's error state,
+            voltage and temperature.
+            
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            voltage : float
+                Unit: `1 V`.
+            error : int
+                Each bit represents a different motor state. You can get table
+                with error states and their descriptions in the datasheet.
+        """
         temperature, _voltage, error_state = self.__get_error_state()
         voltage = self.voltage_scale * _voltage
         return temperature, voltage, error_state
@@ -351,6 +432,20 @@ class GyemsRMD(CANDevice):
         return temperature, voltage, error_state
 
     def clean_error_state(self):
+        """
+            Send the command to the motor to clear its error state and get
+            get back new error state, voltage and temperature.
+            
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            voltage : float
+                Unit: `1 V`.
+            error : int
+                Each bit represents a different motor state. You can get table
+                with error states and their descriptions in the datasheet.
+        """
         temperature, _voltage, error_state = self.__clean_error_state()
         voltage = self.voltage_scale * _voltage
         return temperature, voltage, error_state
@@ -392,6 +487,21 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def get_state(self):
+        """
+            Send the command to the motor to get its temperature, torque
+            current, speed and encoder position.
+            
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            current : float
+                Unit: `1 A`.
+            speed : float
+                Unit: `1 rad / s`.
+            pos : float
+                Unit: `1 rad`. Range from 0 to 2*pi.
+        """
         _state = self.__get_state()
         state = self.__convert_state(_state)
         return state
@@ -418,6 +528,16 @@ class GyemsRMD(CANDevice):
         return iA, iB, iC
 
     def get_phase_current(self):
+        """
+            Send the command to the motor to get its phase current.
+            
+            Returns
+            -------
+            phase_current : tuple of floats
+                Unit: `1 A`.
+                Tuple containing phase current of the motor.
+                Format: (iA, iB, iC).
+        """
         _iA, _iB, _iC = self.__get_phase_current()
         iA = self.phase_current_scale * _iA
         iB = self.phase_current_scale * _iB
@@ -498,6 +618,29 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def set_current(self, current):
+        """
+            Send the command to the motor to control its torque current output.
+            Get temperature, torque current, speed and encoder position of the
+            motor in response.
+            
+            Parameters
+            ----------
+            current : float
+                Unit: `1 A`.
+                Range -32 to 32 (the bus current and the actual torque of
+                the motor vary with deffirent motors).
+            
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            current : float
+                Unit: `1 A`.
+            speed : float
+                Unit: `1 rad / s`.
+            pos : float
+                Unit: `1 rad`. Range from 0 to 2*pi.
+        """
         _current = self.current_scale_set * current
         _state = self.__set_current(_current)
         state = self.__convert_state(_state)
@@ -541,6 +684,27 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def set_speed(self, speed):
+        """
+            Send the command to the motor to control its speed.
+            Get temperature, torque current, speed and encoder position of the
+            motor in response.
+            
+            Parameters
+            ----------
+            speed : float
+                Unit: `1 rad / s`.
+            
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            current : float
+                Unit: `1 A`.
+            speed : float
+                Unit: `1 rad / s`.
+            pos : float
+                Unit: `1 rad`. Range from 0 to 2*pi.
+        """
         _speed = self.speed_scale_set * math.degrees(speed)
         _state = self.__set_speed(_speed)
         state = self.__convert_state(_state)
@@ -598,6 +762,32 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def set_multi_turns_angle(self, mt_angle, speed_limit=None):
+        """
+            Send the command to the motor to control its multi-turns angle.
+            Get temperature, torque current, speed and encoder position of the
+            motor in response.
+            
+            Parameters
+            ----------
+            mt_angle : float
+                Unit: `1 rad`.
+                Positive value indicates clockwise angle, negative value
+                indicates counter-clockwise angle.
+            speed_limit : float, optional
+                Unit: `1 rad / s`.
+                Limit the maximum speed of the motor rotation.
+
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            current : float
+                Unit: `1 A`.
+            speed : float
+                Unit: `1 rad / s`.
+            pos : float
+                Unit: `1 rad`. Range from 0 to 2*pi.
+        """
         _mt_angle = self.angle_set * math.degrees(mt_angle)
 
         if speed_limit is not None:
@@ -667,6 +857,35 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def set_single_circle_angle(self, sc_angle, speed_limit=None, dir=0):
+        """
+            Send the command to the motor to control its multi-turns angle.
+            Get temperature, torque current, speed and encoder position of the
+            motor in response.
+            
+            Parameters
+            ----------
+            sc_angle : float
+                Unit: `1 rad`.
+                Single-circle angle of the motor, starting from encoder zero,
+                increased by clockwise rotation. Range from 0 to 2*pi.
+            speed_limit : float, optional
+                Unit: `1 rad / s`.
+                Limit the maximum speed of the motor rotation.
+            dir : int, optional
+                This value sets the direction in which the motor rotates.
+                `0` for clockwise rotation and `1` for counter clockwise.
+
+            Returns
+            -------
+            temperature : int
+                Unit: `1 C`.
+            current : float
+                Unit: `1 A`.
+            speed : float
+                Unit: `1 rad / s`.
+            pos : float
+                Unit: `1 rad`. Range from 0 to 2*pi.
+        """
         _sc_angle = self.angle_set * math.degrees(sc_angle)
         
         if speed_limit is not None:
