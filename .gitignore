@@ -1,0 +1,12 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Plots folder
+plots/
+
+# VS code settings
+.vscode/
+
+# can scripts
+can/
