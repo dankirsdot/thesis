@@ -1,5 +1,6 @@
 import math
 
+from can import CANSocket
 from can import CANDevice
 
 class GyemsRMD(CANDevice):
@@ -17,8 +18,8 @@ class GyemsRMD(CANDevice):
         http://dowload.gyems.cn/RMD%20servo%20motor%20control%20protocol%20%28CAN%20BUS%20%29V1.61.pdf
     """
 
-    def __init__(self, can_socket, id=0x141):
-
+    def __init__(self, can_socket: CANSocket, id=0x141):
+        
         super().__init__(can_socket, id)
 
         self.protocol = {
@@ -73,8 +74,8 @@ class GyemsRMD(CANDevice):
 
         self.sc_angle_min = 0
         self.sc_angle_max = 35999
-        self.angle_set = 100
-        self.angle_get = 0.01
+        self.angle_scale_set = 100
+        self.angle_scale_get = 0.01
         
         self.voltage_scale = 0.1
         self.phase_current_scale = 1 / 64
@@ -325,7 +326,7 @@ class GyemsRMD(CANDevice):
                 indicates counter-clockwise angle.
         """
         _mt_angle = self.__get_multi_turns_angle()
-        mt_angle = math.radians(self.angle_get * _mt_angle)
+        mt_angle = math.radians(self.angle_scale_get * _mt_angle)
         return mt_angle
 
     def __get_single_circle_angle(self):
@@ -358,7 +359,7 @@ class GyemsRMD(CANDevice):
                 Range from 0 to 2*pi. Increased by clockwise rotation.
         """
         _sc_angle = self.__get_single_circle_angle()
-        sc_angle = math.radians(self.angle_get * _sc_angle)
+        sc_angle = math.radians(self.angle_scale_get * _sc_angle)
         return sc_angle
 
     def __get_error_state(self):
@@ -424,7 +425,6 @@ class GyemsRMD(CANDevice):
         self.command = code + 7 * b"\x00"
         self.execute()
         # no check here, since command and reply has different codes
-        # TODO: check reply
 
         temperature = self.reply[1] # BUG: inadequate temperature numbers
         voltage = self.from_bytes(self.reply[3:5], signed=False)
@@ -480,6 +480,7 @@ class GyemsRMD(CANDevice):
         return temperature, current, speed, pos
 
     def __convert_state(self, state):
+        # TODO: add description
         temperature, _current, _speed, _pos = state
         current = self.current_scale_get * _current
         speed = math.radians(_speed)
@@ -788,7 +789,7 @@ class GyemsRMD(CANDevice):
             pos : float
                 Unit: `1 rad`. Range from 0 to 2*pi.
         """
-        _mt_angle = self.angle_set * math.degrees(mt_angle)
+        _mt_angle = self.angle_scale_set * math.degrees(mt_angle)
 
         if speed_limit is not None:
             _speed_limit = math.degrees(speed_limit)
@@ -886,7 +887,7 @@ class GyemsRMD(CANDevice):
             pos : float
                 Unit: `1 rad`. Range from 0 to 2*pi.
         """
-        _sc_angle = self.angle_set * math.degrees(sc_angle)
+        _sc_angle = self.angle_scale_set * math.degrees(sc_angle)
         
         if speed_limit is not None:
             _speed_limit = math.degrees(speed_limit)

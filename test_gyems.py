@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from can import CANSocket
 from gyems import GyemsRMD
 
-
 if __name__ == '__main__':
     try:
         sock = CANSocket(interface='can1')

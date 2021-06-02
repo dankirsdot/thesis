@@ -28,7 +28,7 @@ class CANSocket:
         return id, dlc, data
 
 class CANDevice:
-    def __init__(self, can_socket, id=0x01):
+    def __init__(self, can_socket: CANSocket, id=0x01):
         self.can_socket = can_socket
         self.id = id
 
