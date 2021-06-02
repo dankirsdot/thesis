@@ -22,7 +22,7 @@ if __name__ == '__main__':
         setup.start()
 
         t, X, X_d, dX_d, dX_hat, ddX, ddX_hat, \
-            dtheta, ddtheta, u, r, F, e = setup.control()
+            dtheta, ddtheta, u, r, F, e, theta = setup.control()
         
         setup.stop()
 
@@ -34,6 +34,7 @@ if __name__ == '__main__':
         ddX_hat = np.array(ddX_hat)
         ddtheta = np.array(ddtheta)
         e = np.array(e)
+        theta = np.array(theta)
 
         tilde_X = X_d - X
         frequency = 1 / np.diff(t)
@@ -56,6 +57,18 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.legend()
         plt.savefig('plots/X.png', dpi=300)
+
+        plt.figure(figsize=(7, 3))
+        plt.title(r'Angular position $X(t)$')
+        plt.plot(t, theta, 'r', linewidth=1.5, label=r'$\theta(t)$', zorder=1)
+        plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
+        plt.grid(True)
+        plt.xlim([0, t[-1]])
+        plt.xlabel(r'Time $t$')
+        plt.ylabel(r'Angle $\theta(t)$')
+        plt.tight_layout()
+        plt.legend()
+        plt.savefig('plots/theta.png', dpi=300)
 
         start = 0
         plt.figure(figsize=(7, 3))

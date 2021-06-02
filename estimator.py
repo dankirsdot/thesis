@@ -60,7 +60,7 @@ class EstimatorMHE:
         self.n = 0
 
         # const function gains
-        self.W = 0.06
+        self.W = 0.0006
         self.Gamma = 8e9
         
         # state horizons
