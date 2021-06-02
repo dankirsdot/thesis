@@ -60,8 +60,8 @@ class EstimatorMHE:
         self.n = 0
 
         # const function gains
-        self.W = 0.0006
-        self.Gamma = 8e9
+        self.W = 0.06
+        self.Gamma = 8e8
         
         # state horizons
         self.theta_h = np.zeros(self.N)
@@ -109,7 +109,7 @@ class EstimatorMHE:
             # self.p = self.p + (1 / H) * g
 
             H = np.array([[H]])
-            g = np.array([g])
+            g = np.array([-g])
 
             G = np.array([[-1.], [1.]])
 

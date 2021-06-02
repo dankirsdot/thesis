@@ -19,18 +19,24 @@ if __name__ == '__main__':
 
         setup = Setup(actuator, sensors)
         
-        setup.start()
+        turns = 10
+        setup.init(turns)
 
-        t, X, X_d, dX_d, dX_hat, ddX, ddX_hat, \
-            dtheta, ddtheta, u, r, F, e, theta = setup.control()
+        omega_0 = 3.0
+        omega_f = 3.0
+        t_f = 30.0
+        X_max = 40.0
+
+        t, X, X_d, dX, dX_d, dX_hat, \
+        ddX_accel, ddX_hat, theta, dtheta,  ddtheta, \
+        u, r, F, e = setup.start(omega_0, omega_f, t_f, X_max)
         
-        setup.stop()
-
         t = np.array(t)
         X = np.array(X)
         X_d = np.array(X_d)
+        dX = np.array(dX)
         F = np.array(F)
-        ddX_accel = np.array(ddX)
+        ddX_accel = np.array(ddX_accel)
         ddX_hat = np.array(ddX_hat)
         ddtheta = np.array(ddtheta)
         e = np.array(e)
@@ -39,11 +45,12 @@ if __name__ == '__main__':
         tilde_X = X_d - X
         frequency = 1 / np.diff(t)
 
-        dX = np.diff(X) / np.diff(t)
-        ddX = np.diff(dX) / np.diff(t)[:-1]
+        ddX = np.diff(dX[:-1]) / np.diff(t)[:-1]
 
-        butter = signal.butter(10, 20, 'lp', fs=200, output='sos')
-        ddtheta_filtered = signal.sosfilt(butter, ddtheta)
+        data = np.stack([t, X, X_d, dX, dX_d, dX_hat, \
+                         ddX_accel, ddX_hat, theta, dtheta,  ddtheta, \
+                         u, r, F, e]).T
+        np.savetxt("data.csv", data, delimiter=",")
 
         plt.figure(figsize=(7, 3))
         plt.title(r'Linear position $X(t)$')
@@ -98,9 +105,9 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(7, 3))
         plt.title(r'Linear acceleration $\ddot{X}(t)$')
-        plt.plot(t, ddX_accel, 'r', linewidth=1.5, label=r'$\ddot{X}_a$', zorder=2)
+        plt.plot(t, ddX_accel, 'r', linewidth=1.5, label=r'$\ddot{X}_a$', zorder=1)
         # plt.plot(t[:-2], ddX, 'g', linewidth=1.5, label=r'$\ddot{X}$', zorder=1)
-        plt.plot(t, ddX_hat, 'b', linewidth=1.5, label=r'$\hat{\ddot{X}}$', zorder=1)
+        plt.plot(t, ddX_hat, 'b', linewidth=1.5, label=r'$\hat{\ddot{X}}$', zorder=2)
         plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
         plt.grid(True)
         plt.xlim([0, t[-1]])
@@ -114,7 +121,6 @@ if __name__ == '__main__':
         plt.figure(figsize=(7, 3))
         plt.title(r'Angular acceleration $\ddot{\theta}(t)$')
         plt.plot(t, ddtheta, 'r', linewidth=1.5, label=r'$\ddot{\theta}$', zorder=1)
-        plt.plot(t, ddtheta_filtered, 'b', linewidth=1.5, label=r'$\ddot{\theta}_f$', zorder=2)
         plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
         plt.grid(True)
         plt.xlim([0, t[-1]])
@@ -150,7 +156,7 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(7, 3))
         plt.title(r'Contraction speed $\dot{X}(t)$')
-        plt.plot(t[:-1], dX, 'r', linewidth=1.5, label=r'$\dot{X}(t)$', zorder=2)
+        plt.plot(t, dX, 'r', linewidth=1.5, label=r'$\dot{X}(t)$', zorder=2)
         plt.plot(t, dX_hat, 'g', linewidth=1.5, label=r'$\hat{\dot{X}}(t)$', zorder=2)
         plt.plot(t, dX_d, 'b', linewidth=1.5, label=r'$\dot{X}_d(t)$', zorder=2)
         plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
@@ -190,4 +196,4 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
     finally:
-        setup.stop()
+        setup.to_zero()

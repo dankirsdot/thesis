@@ -68,5 +68,5 @@ class CANDevice:
             command code in self.command and self.reply strings.
         """
         if self.reply[0] is not self.command[0]:
-            print("Motor responded in a wrong way!")
-            raise Exception
+            print("Device responded in a wrong way!")
+            # raise Exception
