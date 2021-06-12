@@ -69,4 +69,6 @@ class CANDevice:
         """
         if self.reply[0] is not self.command[0]:
             print("Device responded in a wrong way!")
+            print("Command :", self.command[0])
+            print("Reply :", self.reply[0])
             # raise Exception

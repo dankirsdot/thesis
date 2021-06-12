@@ -7,7 +7,7 @@ from multiprocessing import Process, Value
 from gyems import GyemsRMD
 from sensors import CANSensors
 from trajectory import chirp_trajectory
-from estimator import EstimatorMHE, EstimatorMHE_new, Estimator
+from estimator import EstimatorMHE_new, Estimator
 
 class Setup:
     """ 
@@ -22,6 +22,7 @@ class Setup:
         self.sensors = sensors
         self.sensors.reset()
         # self.sensors.calibrate_force()
+
 
         self.t_l = []
         self.X_l = []
@@ -39,18 +40,14 @@ class Setup:
         self.F_l = []
         self.e_l = []
         self.theta_l = []
-
-        self.r_mhe_l = []
-        self.e_mhe_l = []
-
+    
         self.L = 210
-        self.r = 0.9
+        self.r = 0.8
         self.estimator = Estimator(self.L, self.r)
-        self.mhe = EstimatorMHE(self.L, self.r, 50)
-        self.mhe_new = EstimatorMHE_new(self.L, self.r, 50)
+        self.mhe = EstimatorMHE_new(self.L, self.r, 50)
 
         self.estimation_dt = 1 / 200
-        self.control_dt = 1 / 500
+        self.control_dt = 1 / 300
         self.control_p = Process(target=self.control_process)
 
         self.u = Value("d", 0)
@@ -58,6 +55,12 @@ class Setup:
         self.theta = Value("d", 0)
         self.dtheta = Value("d", 0)
         self.ddtheta = Value("d", 0)
+        
+        self.X = Value("d", 0)
+        self.dX = Value("d", 0)
+        self.ddX = Value("d", 0)
+
+        self.F = Value("d", 0)
 
         self.turn = 2 * math.pi
         self.speed_limit = 16 * self.turn
@@ -90,18 +93,18 @@ class Setup:
 
     def control_process(self):
         theta = self.actuator.get_multi_turns_angle()
-        self.turn_counter = theta // self.turn
         _theta_p = theta - self.turn * self.turn_counter
+        self.turn_counter = theta // self.turn
 
         self.theta.value = theta
 
-        # discrete filtered derivative
-        # https://www.mathworks.com/help/physmod/sps/ref/filteredderivativediscreteorcontinuous.html
         x = 0.0
         y = 0.0
         K = 1.0
         T = 0.01
-        
+
+        X_p = self.X.value
+
         t = time.perf_counter()
         t_p = t
         while True:
@@ -117,32 +120,45 @@ class Setup:
                 theta = self.multi_turns_encoder(_theta, _theta_p)
                 _theta_p = _theta
 
-                # discrete filtered derivative
+
+                # differentiate dtheta
                 y = (K / T) * (dtheta - x)         # n
                 x = (1 - dt/T) * x + (dt/T)*dtheta # n + 1
                 ddtheta = y
+
+                # ddtheta = (dtheta - dtheta_p) / dt
+                # dtheta = self.alpha * dtheta + (self.alpha - 1) * dtheta_p
+                # dtheta_p = dtheta
+
+                # ddtheta = self.alpha * ddtheta + (self.alpha - 1) * ddtheta_p
+                # ddtheta_p = ddtheta
 
                 self.theta.value = theta
                 self.dtheta.value = dtheta
                 self.ddtheta.value = ddtheta
 
-                # print(1/dt)
+                X, F, _ddX = self.sensors.get_state()
+                dX = (X - X_p) / dt
+                X_p = X
+                ddX = 1e3 * _ddX # convert to (mm / s**2)
+
+                self.X.value = X
+                self.dX.value = dX
+                self.ddX.value = ddX
+
+                self.F.value = F
+
 
     def start(self, omega_0=3.0, omega_f=3.0, t_f=10.0, X_max=40):
         t_0 = 0.0      # seconds
-        X, _, _ddX = self.sensors.get_state()
+        X, _, _ = self.sensors.get_state()
         chirp = chirp_trajectory(t_0, t_f, omega_0, omega_f, X, X_max)
+
+        self.X.value = X
 
         Kp = 10 # control gain
 
-        theta_p = 0
-        dtheta_p = 0
-
-        X_p = X
-
-        ddX_p = 1e3 * _ddX # convert to (mm / s**2)
-        alpha = 1.0
-
+        self.u.value = 0
         self.control_p.start()
         time.sleep(1)
 
@@ -158,18 +174,15 @@ class Setup:
             if dt >= self.estimation_dt:
                 t_p = t
 
-                X, F, _ddX = self.sensors.get_state()
-                
-                ddX = 1e3 * _ddX # convert to (mm / s**2)
-                ddX = alpha * ddX + (alpha - 1) * ddX_p
-                ddX_p = ddX
-
-                dX = (X - X_p) / dt
-                X_p = X
-
                 theta = self.theta.value
                 dtheta = self.dtheta.value
                 ddtheta = self.ddtheta.value
+
+                X = self.X.value
+                dX = self.dX.value
+                ddX = self.ddX.value
+
+                F = self.F.value
 
                 X_d, dX_d = chirp.get(t)
 
@@ -181,23 +194,13 @@ class Setup:
                 X_hat = self.L - math.sqrt(self.L**2 - theta**2 * self.r**2)
                 dX_hat = (1 / inv_J) * dtheta
 
-                # ddX_hat = self.mhe.get_ddX(theta, dtheta, ddtheta, self.L, self.r**2)                
-                # r_mhe, e_mhe = self.mhe.estimate(theta, dtheta, ddtheta, ddX)
-                
-                r_mhe, e_mhe, ddX_hat = self.mhe_new.estimate(theta, dtheta, ddX, dt)
-                # r_mhe = 0
-                # e_mhe = 0
+                # ddX_hat = self.mhe.get_ddX(theta, dtheta, ddtheta, self.r**2, self.L**2)
+                # self.r, self.L, e = self.mhe.estimate(theta, dtheta, ddtheta, ddX)
+                self.r, e, ddX_hat = self.mhe.estimate(theta, dtheta, ddX, dt)
+                print(self.r)
 
-                self.r = self.estimator.update(theta, X)
-                # e = ddX_hat - ddX
-
-                p = self.r**2
-                J = (theta * p) / math.sqrt(self.L**2 - theta**2 * p)
-                J_p = (theta_p * p) / math.sqrt(self.L**2 - theta_p**2 * p)
-                e = (J * dtheta - J_p * dtheta_p) - ddX * dt
-
-                theta_p = theta
-                dtheta_p = dtheta
+                # self.r = self.estimator.update(theta, X)
+                # e = 0
 
                 self.t_l.append(t)
                 self.X_l.append(X)
@@ -215,12 +218,9 @@ class Setup:
                 self.r_l.append(self.r)
                 self.F_l.append(F)
                 self.e_l.append(e)
-
-                self.r_mhe_l.append(r_mhe)
-                self.e_mhe_l.append(e_mhe)
         
         self.to_zero()
 
         return self.t_l, self.X_l, self.X_d_l, self.X_hat_l, self.dX_l, self.dX_d_l, self.dX_hat_l, \
                self.ddX_l, self.ddX_hat_l, self.theta_l, self.dtheta_l,  self.ddtheta_l, \
-               self.u_l, self.r_l, self.F_l, self.e_l, self.r_mhe_l, self.e_mhe_l
+               self.u_l, self.r_l, self.F_l, self.e_l
