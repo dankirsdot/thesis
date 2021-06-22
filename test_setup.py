@@ -2,7 +2,6 @@ import time
 import math
 
 import numpy as np
-from scipy import signal
 import matplotlib.pyplot as plt
 
 from can import CANSocket
@@ -26,8 +25,8 @@ if __name__ == '__main__':
 
         omega_0 = 2 * math.pi
         omega_f = 2 * math.pi
-        t_f = 30.0
-        X_max = 10.0
+        t_f = 100.0
+        X_max = 20.0
 
         t, X, X_d, X_hat, dX, dX_d, dX_hat, \
         ddX_accel, ddX_hat, theta, dtheta,  ddtheta, \
@@ -118,7 +117,7 @@ if __name__ == '__main__':
         plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
         plt.grid(True)
         plt.xlim([0, t[-1]])
-        plt.ylim([-1500, 1500])
+        # plt.ylim([-1500, 1500])
         plt.xlabel(r'Time $t$')
         plt.ylabel(r'Acceleration $\ddot{X}(t)$')
         plt.tight_layout()

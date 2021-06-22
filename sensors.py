@@ -25,7 +25,7 @@ class CANSensors(CANDevice):
 
         self.pos_scale = 25.4 / (360 * 4)
 
-        self.g = 9.8067
+        self.g = 9.6 # not 9.8067, due to bad accelerometer calibration
         
         self.force_scale = 1
         self.force_offset = 0
@@ -52,7 +52,8 @@ class CANSensors(CANDevice):
         pos = self.pos_scale * _pos
         force = self.force_scale * (_force - self.force_offset)
         # accel = _accel
-        accel = self.g * (_accel - 1)
+        # accel = self.g * (_accel - 1)
+        accel = _accel - self.g
         return pos, force, accel
 
     def calibrate_force(self, mass=1.25, n=10000):

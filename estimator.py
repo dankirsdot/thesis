@@ -1,10 +1,15 @@
 import math
 
 import numpy as np
-from sympy import symbols, sqrt, diff, simplify, lambdify
+import sympy as sym
+
+import casadi as cs
 
 import quadprog
 from cvxopt import matrix, solvers
+
+import osqp
+from scipy import sparse
 
 class Estimator:
     """ 
@@ -52,6 +57,20 @@ class EstimatorMHE:
         self.dp_l= -0.01**2
         self.dp_u = 0.01**2
 
+        # Create an OSQP object
+        self.prob = osqp.OSQP()
+
+        # Define problem data
+        P = sparse.csc_matrix([0])
+        q = np.array([0])
+        A = sparse.csc_matrix([1])
+        l = np.array([self.p_l])
+        u = np.array([self.p_u])
+
+        # Setup workspace
+        self.prob.setup(P, q, A, l, u, adaptive_rho=False, verbose=False)
+
+
         # horizon length
         if N is not None:
             self.N = N
@@ -72,19 +91,15 @@ class EstimatorMHE:
 
         # Jacobian of the acceleration model
         # with respect to parameter p (r**2)
-        theta, dtheta = symbols(r'\theta \dot{\theta}', real=True)
-        ddtheta = symbols(r'\ddot{\theta}', real=True)
-        L = symbols(r'L', real=True)
-        p = symbols(r'p', real=True)
+        theta, dtheta = sym.symbols(r'\theta \dot{\theta}', real=True)
+        ddtheta = sym.symbols(r'\ddot{\theta}', real=True)
+        L = sym.symbols(r'L', real=True)
+        p = sym.symbols(r'p', real=True)
 
-        ddX = p / sqrt(L**2 - theta**2 * p) \
-            * (theta * ddtheta + dtheta**2 * (theta**2 * p / (L**2 - theta**2 * p) + 1))
-        ddX_dp = simplify(diff(ddX, p))
-        self.J_p = lambdify([theta, dtheta, ddtheta, L, p], ddX_dp)
-
-    # def J_p(self, theta, dtheta, ddtheta, L, p):
-    #     j_p = self.j_p(theta, dtheta, ddtheta, L, p)
-    #     return np.array(j_p)
+        ddX = (p / sym.sqrt(L**2 - theta**2 * p)) \
+            * (theta * ddtheta + dtheta**2 * ((theta**2 * p) / (L**2 - theta**2 * p) + 1))
+        ddX_dp = sym.simplify(sym.diff(ddX, p))
+        self.J_p = sym.lambdify([theta, dtheta, ddtheta, L, p], ddX_dp)
 
     def estimate(self, theta, dtheta, ddtheta, ddX):
         # shift horizon
@@ -106,7 +121,7 @@ class EstimatorMHE:
             return r, e
         else:
             H, g, e = self.get_qp()
-
+ 
             H = np.array([[H]])
             g = np.array([g])
 
@@ -114,17 +129,37 @@ class EstimatorMHE:
 
             G_p = np.array([[-1.], [1.]])
             h_p = np.array([-self.p_l + self.p,
-                           self.p_u - self.p])
+                             self.p_u - self.p])
             G = np.append(G, G_p)
             G = G.reshape(int(len(G)), 1)
             h = np.append(h, h_p)
 
-            G_dp = np.array([[-1.], [1.]])
-            h_dp = np.array([-self.dp_l,
-                           self.dp_u])
-            G = np.append(G, G_dp)
-            G = G.reshape(int(len(G)), 1)
-            h = np.append(h, h_p)
+            # G_dp = np.array([[-1.], [1.]])
+            # h_dp = np.array([-self.dp_l,
+            #                  self.dp_u])
+            # G = np.append(G, G_dp)
+            # G = G.reshape(int(len(G)), 1)
+            # h = np.append(h, h_dp)
+
+            # Define problem data
+            # P_new = sparse.csc_matrix([H])
+            # q_new = np.array([g])
+            # A_new = sparse.csc_matrix([1])
+            # l_new = np.array([self.p_l])
+            # u_new = np.array([self.p_u])
+
+            # Update osqp problem
+            # self.prob.update(Px=sparse.triu(P_new).data, Ax=A_new.data)
+            # self.prob.update(q=q_new, l=l_new, u=u_new)
+
+            # Solve the problem
+            # res = self.prob.solve()
+
+            # Check solver status
+            # if res.info.status != 'solved':
+            #    raise ValueError('OSQP did not solve the problem!')
+            
+            # p_tilde = res.x[0]
 
             p_tilde = self.quadprog_solve_qp(H, g, G, h)[0]
             # p_tilde = self.cvxopt_solve_qp(H, g, G, h)[0]
@@ -135,8 +170,8 @@ class EstimatorMHE:
             return r, e
 
     def get_ddX(self, theta, dtheta, ddtheta, L, p):
-        ddX = p / np.sqrt(L**2 - theta**2 * p) \
-            * (theta * ddtheta + dtheta**2 * (theta**2 * p / (L**2 - theta**2 * p) + 1))
+        ddX = (p / np.sqrt(L**2 - theta**2 * p)) \
+            * (theta * ddtheta + dtheta**2 * ((theta**2 * p) / (L**2 - theta**2 * p) + 1))
         return ddX
 
     def get_qp(self):
@@ -198,6 +233,27 @@ class EstimatorMHE:
         x_opt = np.array(sol['x']).reshape((P.shape[1],))
         return x_opt
 
+    def create_casadi_solver(self):
+        p = cs.SX.sym('p')
+        L = cs.SX.sym('L')
+        theta = cs.SX.sym('theta')
+        dtheta = cs.SX.sym('dtheta')
+        ddtheta = cs.SX.sym('ddtheta')
+
+        f = p / (cs.sqrt(L**2 - theta**2 * p)) \
+            * (theta * ddtheta + dtheta**2 * ((theta**2 * p)/(L**2 - theta**2 * p) + 1))
+
+        get_ddX_hat = cs.Function('get_ddX_hat', [p, L, theta, dtheta, ddtheta], [f], \
+            ['p', 'L', 'theta', 'dtheta', 'ddtheta'], ['ddx_hat'])
+
+        ddX_hat = get_ddX_hat.map(self.N)
+        ddX = cs.MX.sym('ddX', 5)
+
+        # e = ddX_hat - ddX
+
+        # print(e)
+
+
 class EstimatorMHE_new:
     """ 
         TODO: add description
@@ -234,13 +290,13 @@ class EstimatorMHE_new:
 
         # Jacobian of the jacobian of TSA model
         # with respect to parameter p (r**2)
-        theta, dtheta = symbols(r'\theta \dot{\theta}', real=True)
-        L = symbols(r'L', real=True)
-        p = symbols(r'p', real=True)
+        theta, dtheta = sym.symbols(r'\theta \dot{\theta}', real=True)
+        L = sym.symbols(r'L', real=True)
+        p = sym.symbols(r'p', real=True)
 
-        sym_J = (theta * p) / sqrt(L**2 - theta**2 * p)
-        sym_J_diff = simplify(diff(sym_J, p))
-        self.lambd_J_diff = lambdify([theta, L, p], sym_J_diff)
+        sym_J = (theta * p) / sym.sqrt(L**2 - theta**2 * p)
+        sym_J_diff = sym.simplify(sym.diff(sym_J, p))
+        self.lambd_J_diff = sym.lambdify([theta, L, p], sym_J_diff)
 
     def estimate(self, theta, dtheta, ddX, dt):
         # shift horizon
@@ -281,7 +337,7 @@ class EstimatorMHE_new:
                               self.dp_u])
             G = np.append(G, G_dp)
             G = G.reshape(int(len(G)), 1)
-            h = np.append(h, h_p)
+            h = np.append(h, h_dp)
 
             p_tilde = self.quadprog_solve_qp(H, g, G, h)[0]
             # p_tilde = self.cvxopt_solve_qp(H, g, G, h)[0]

@@ -44,13 +44,12 @@ class Setup:
         self.e_mhe_l = []
 
         self.L = 210
-        self.r = 0.9
+        self.r = 0.7
         self.estimator = Estimator(self.L, self.r)
-        self.mhe = EstimatorMHE(self.L, self.r, 50)
-        self.mhe_new = EstimatorMHE_new(self.L, self.r, 50)
+        self.mhe = EstimatorMHE(self.L, self.r, 10)
 
         self.estimation_dt = 1 / 200
-        self.control_dt = 1 / 500
+        self.control_dt = 1 / 200
         self.control_p = Process(target=self.control_process)
 
         self.u = Value("d", 0)
@@ -100,7 +99,7 @@ class Setup:
         x = 0.0
         y = 0.0
         K = 1.0
-        T = 0.01
+        T = 0.05
         
         t = time.perf_counter()
         t_p = t
@@ -128,6 +127,11 @@ class Setup:
 
                 # print(1/dt)
 
+    def get_ddX_hat(self, theta, dtheta, ddtheta, r, L):
+        ddX_hat = (r**2 / math.sqrt(L**2 - theta**2 * r**2)) * \
+            (theta * ddtheta + dtheta**2 * ((theta**2 * r**2)/(L**2 - theta**2 * r**2) + 1))
+        return ddX_hat
+
     def start(self, omega_0=3.0, omega_f=3.0, t_f=10.0, X_max=40):
         t_0 = 0.0      # seconds
         X, _, _ddX = self.sensors.get_state()
@@ -135,13 +139,14 @@ class Setup:
 
         Kp = 10 # control gain
 
-        theta_p = 0
-        dtheta_p = 0
-
         X_p = X
 
-        ddX_p = 1e3 * _ddX # convert to (mm / s**2)
-        alpha = 1.0
+        # low-pass filter
+        # https://www.mathworks.com/help/physmod/sps/ref/lowpassfilterdiscreteorcontinuous.html
+        x = 0
+        y = 0
+        K = 1.0
+        T = 0.005
 
         self.control_p.start()
         time.sleep(1)
@@ -159,17 +164,20 @@ class Setup:
                 t_p = t
 
                 X, F, _ddX = self.sensors.get_state()
-                
-                ddX = 1e3 * _ddX # convert to (mm / s**2)
-                ddX = alpha * ddX + (alpha - 1) * ddX_p
-                ddX_p = ddX
-
-                dX = (X - X_p) / dt
-                X_p = X
 
                 theta = self.theta.value
                 dtheta = self.dtheta.value
                 ddtheta = self.ddtheta.value
+                
+                # low-pass filter
+                y = x                              # n
+                x = (1 - dt/T) * x + K*(dt/T)*_ddX # n + 1
+                _ddX = y
+
+                ddX = 1e3 * _ddX # convert to (mm / s**2)
+
+                dX = (X - X_p) / dt
+                X_p = X
 
                 X_d, dX_d = chirp.get(t)
 
@@ -181,23 +189,16 @@ class Setup:
                 X_hat = self.L - math.sqrt(self.L**2 - theta**2 * self.r**2)
                 dX_hat = (1 / inv_J) * dtheta
 
-                # ddX_hat = self.mhe.get_ddX(theta, dtheta, ddtheta, self.L, self.r**2)                
-                # r_mhe, e_mhe = self.mhe.estimate(theta, dtheta, ddtheta, ddX)
-                
-                r_mhe, e_mhe, ddX_hat = self.mhe_new.estimate(theta, dtheta, ddX, dt)
-                # r_mhe = 0
-                # e_mhe = 0
+                ddX_hat = self.mhe.get_ddX(theta, dtheta, ddtheta, self.L, self.r**2)                
+                r_mhe, e_mhe = self.mhe.estimate(theta, dtheta, ddtheta, ddX)
+                #r_mhe = 0
+                #e_mhe = 0
 
-                self.r = self.estimator.update(theta, X)
-                # e = ddX_hat - ddX
+                r = self.estimator.update(theta, X)
+                # ddX_hat = self.get_ddX_hat(theta, dtheta, ddtheta, self.r, self.L)
+                e = ddX_hat - ddX
 
-                p = self.r**2
-                J = (theta * p) / math.sqrt(self.L**2 - theta**2 * p)
-                J_p = (theta_p * p) / math.sqrt(self.L**2 - theta_p**2 * p)
-                e = (J * dtheta - J_p * dtheta_p) - ddX * dt
-
-                theta_p = theta
-                dtheta_p = dtheta
+                self.r = r_mhe
 
                 self.t_l.append(t)
                 self.X_l.append(X)
@@ -212,7 +213,7 @@ class Setup:
                 self.dtheta_l.append(dtheta)
                 self.ddtheta_l.append(ddtheta)
                 self.u_l.append(u)
-                self.r_l.append(self.r)
+                self.r_l.append(r)
                 self.F_l.append(F)
                 self.e_l.append(e)
 
