@@ -46,10 +46,10 @@ class Setup:
         self.L = 210
         self.r = 0.7
         self.estimator = Estimator(self.L, self.r)
-        self.mhe = EstimatorMHE(self.L, self.r, 10)
+        self.mhe = EstimatorMHE(self.L, self.r, 50)
 
         self.estimation_dt = 1 / 200
-        self.control_dt = 1 / 200
+        self.control_dt = 1 / 300
         self.control_p = Process(target=self.control_process)
 
         self.u = Value("d", 0)
@@ -145,8 +145,8 @@ class Setup:
         # https://www.mathworks.com/help/physmod/sps/ref/lowpassfilterdiscreteorcontinuous.html
         x = 0
         y = 0
-        K = 1.0
-        T = 0.005
+        K = 1.1
+        T = 0.02
 
         self.control_p.start()
         time.sleep(1)
@@ -180,25 +180,27 @@ class Setup:
                 X_p = X
 
                 X_d, dX_d = chirp.get(t)
+                
+                X_hat = self.L - math.sqrt(self.L**2 - theta**2 * self.r**2)
 
-                inv_J = (self.L - X) / (theta * self.r**2)
-                tilde_X = X_d - X
+                # inv_J = (self.L - X) / (theta * self.r**2)
+                # tilde_X = X_d - X
+                
+                inv_J = (self.L - X_hat) / (theta * self.r**2)        
+                tilde_X = X_d - X_hat
+
                 u = inv_J * (Kp * tilde_X + dX_d)
                 self.u.value = u
 
-                X_hat = self.L - math.sqrt(self.L**2 - theta**2 * self.r**2)
                 dX_hat = (1 / inv_J) * dtheta
 
-                ddX_hat = self.mhe.get_ddX(theta, dtheta, ddtheta, self.L, self.r**2)                
                 r_mhe, e_mhe = self.mhe.estimate(theta, dtheta, ddtheta, ddX)
-                #r_mhe = 0
-                #e_mhe = 0
-
                 r = self.estimator.update(theta, X)
-                # ddX_hat = self.get_ddX_hat(theta, dtheta, ddtheta, self.r, self.L)
-                e = ddX_hat - ddX
 
                 self.r = r_mhe
+
+                ddX_hat = self.get_ddX_hat(theta, dtheta, ddtheta, self.r, self.L)
+                e = ddX_hat - ddX
 
                 self.t_l.append(t)
                 self.X_l.append(X)

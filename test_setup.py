@@ -20,12 +20,13 @@ if __name__ == '__main__':
 
         setup = Setup(actuator, sensors)
         
-        turns = 10
+        turns = 20
         setup.init(turns)
 
-        omega_0 = 2 * math.pi
-        omega_f = 2 * math.pi
-        t_f = 100.0
+        f = 1.0
+        omega_0 = 2 * math.pi * f
+        omega_f = 2 * math.pi * f
+        t_f = 30.0
         X_max = 20.0
 
         t, X, X_d, X_hat, dX, dX_d, dX_hat, \
@@ -52,9 +53,9 @@ if __name__ == '__main__':
 
         ddX = np.diff(dX[:-1]) / np.diff(t)[:-1]
 
-        data = np.stack([t, X, X_d, dX, dX_d, dX_hat, \
+        data = np.stack([t, X, X_d, X_hat, dX, dX_d, dX_hat, \
                          ddX_accel, ddX_hat, theta, dtheta,  ddtheta, \
-                         u, r, F, e]).T
+                         u, r, F, e, r_mhe, e_mhe]).T
         np.savetxt("data.csv", data, delimiter=",")
 
         plt.figure(figsize=(7, 3))
@@ -117,7 +118,7 @@ if __name__ == '__main__':
         plt.grid(color='black', linestyle='--', linewidth=1.0, alpha=0.7)
         plt.grid(True)
         plt.xlim([0, t[-1]])
-        # plt.ylim([-1500, 1500])
+        plt.ylim([-1500, 1500])
         plt.xlabel(r'Time $t$')
         plt.ylabel(r'Acceleration $\ddot{X}(t)$')
         plt.tight_layout()

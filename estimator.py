@@ -54,8 +54,10 @@ class EstimatorMHE:
         self.p_l = 0.6**2
         self.p_u = 0.9**2
 
-        self.dp_l= -0.01**2
-        self.dp_u = 0.01**2
+        self.dp_l = -0.01**2
+        self.dp_u =  0.01**2
+
+        self.dt = 2e-2
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
@@ -80,7 +82,7 @@ class EstimatorMHE:
         self.n = 0
 
         # const function gains
-        self.W = 0.06
+        self.W = 0.06 / self.N
         self.Gamma = 8e8
         
         # state horizons
@@ -134,12 +136,12 @@ class EstimatorMHE:
             G = G.reshape(int(len(G)), 1)
             h = np.append(h, h_p)
 
-            # G_dp = np.array([[-1.], [1.]])
-            # h_dp = np.array([-self.dp_l,
-            #                  self.dp_u])
-            # G = np.append(G, G_dp)
-            # G = G.reshape(int(len(G)), 1)
-            # h = np.append(h, h_dp)
+            G_dp = np.array([[-1.], [1.]])
+            h_dp = np.array([-self.dp_l / self.dt,
+                              self.dp_u / self.dt])
+            G = np.append(G, G_dp)
+            G = G.reshape(int(len(G)), 1)
+            h = np.append(h, h_dp)
 
             # Define problem data
             # P_new = sparse.csc_matrix([H])
@@ -232,26 +234,6 @@ class EstimatorMHE:
         #     return None
         x_opt = np.array(sol['x']).reshape((P.shape[1],))
         return x_opt
-
-    def create_casadi_solver(self):
-        p = cs.SX.sym('p')
-        L = cs.SX.sym('L')
-        theta = cs.SX.sym('theta')
-        dtheta = cs.SX.sym('dtheta')
-        ddtheta = cs.SX.sym('ddtheta')
-
-        f = p / (cs.sqrt(L**2 - theta**2 * p)) \
-            * (theta * ddtheta + dtheta**2 * ((theta**2 * p)/(L**2 - theta**2 * p) + 1))
-
-        get_ddX_hat = cs.Function('get_ddX_hat', [p, L, theta, dtheta, ddtheta], [f], \
-            ['p', 'L', 'theta', 'dtheta', 'ddtheta'], ['ddx_hat'])
-
-        ddX_hat = get_ddX_hat.map(self.N)
-        ddX = cs.MX.sym('ddX', 5)
-
-        # e = ddX_hat - ddX
-
-        # print(e)
 
 
 class EstimatorMHE_new:
